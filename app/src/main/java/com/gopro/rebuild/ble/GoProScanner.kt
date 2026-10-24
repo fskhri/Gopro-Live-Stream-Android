@@ -26,7 +26,9 @@ data class GoProDevice(
     val rssi: Int = 0,
     val advertisement: Advertisement? = null,
     val bluetoothDevice: BluetoothDevice? = null,
-    val isPaired: Boolean = false
+    val isPaired: Boolean = false,
+    val isPairingMode: Boolean = false,
+    val isPowerOn: Boolean = true
 )
 
 @Singleton
@@ -53,14 +55,16 @@ class GoProScanner @Inject constructor(
         return try {
             adapter.bondedDevices.filter { device ->
                 val name = device.name ?: ""
-                isGoProDeviceName(name)
+                isStrictGoProName(name)
             }.map { device ->
                 GoProDevice(
                     name = device.name ?: "GoPro",
                     address = device.address,
                     rssi = 0,
                     bluetoothDevice = device,
-                    isPaired = true
+                    isPaired = true,
+                    isPairingMode = false,
+                    isPowerOn = false // Standby until live advertisement seen
                 )
             }
         } catch (e: Exception) {
@@ -75,44 +79,76 @@ class GoProScanner @Inject constructor(
     @SuppressLint("MissingPermission")
     fun scan(): Flow<GoProDevice> {
         return scanner.advertisements
-            .onEach { adv ->
-                Log.d(TAG, "Saw BLE device: name='${adv.name}', addr=${adv.address}, rssi=${adv.rssi}")
-            }
             .filter { advertisement ->
                 val name = advertisement.name ?: ""
-                val isGoProName = isGoProDeviceName(name)
+                val mfgData = advertisement.manufacturerData(GoProBleConstants.COMPANY_ID_GOPRO)
+                    ?: if (advertisement.manufacturerData?.code == GoProBleConstants.COMPANY_ID_GOPRO) {
+                        advertisement.manufacturerData?.data
+                    } else null
 
+                val hasGoProMfg = mfgData != null
                 val hasGoProService = advertisement.uuids.any {
                     it == GoProBleConstants.SERVICE_CONTROL_POINT ||
                     it == GoProBleConstants.SERVICE_WIFI_AP ||
                     it == GoProBleConstants.SERVICE_CAMERA_MGMT
                 }
+                val hasStrictName = isStrictGoProName(name)
 
-                (isGoProName || hasGoProService).also { matched ->
+                (hasGoProMfg || hasGoProService || hasStrictName).also { matched ->
                     if (matched) {
-                        Log.i(TAG, ">>> MATCHED GOPRO: name='$name', addr=${advertisement.address} <<<")
+                        val isPairing = if (mfgData != null && mfgData.size >= 2) {
+                            (mfgData[1].toInt() and GoProBleConstants.StatusFlags.PAIRING) != 0
+                        } else false
+                        Log.i(TAG, ">>> MATCHED GOPRO: name='$name', addr=${advertisement.address}, mfg=$hasGoProMfg, svc=$hasGoProService, pairing=$isPairing <<<")
                     }
                 }
             }
             .map { advertisement ->
+                val mfgData = advertisement.manufacturerData(GoProBleConstants.COMPANY_ID_GOPRO)
+                    ?: if (advertisement.manufacturerData?.code == GoProBleConstants.COMPANY_ID_GOPRO) {
+                        advertisement.manufacturerData?.data
+                    } else null
+
+                val isPairingMode = if (mfgData != null && mfgData.size >= 2) {
+                    (mfgData[1].toInt() and GoProBleConstants.StatusFlags.PAIRING) != 0
+                } else false
+
+                val isPowerOn = if (mfgData != null && mfgData.size >= 2) {
+                    (mfgData[1].toInt() and GoProBleConstants.StatusFlags.HOST_POWER_ON) != 0
+                } else true
+
+                val displayName = when {
+                    !advertisement.name.isNullOrBlank() -> advertisement.name!!
+                    mfgData != null && mfgData.size >= 3 -> {
+                        val modelId = mfgData[2].toInt() and 0xFF
+                        "GoPro Camera ($modelId)"
+                    }
+                    else -> "GoPro Camera"
+                }
+
                 GoProDevice(
-                    name = advertisement.name ?: "HERO Camera",
+                    name = displayName,
                     address = advertisement.address,
                     rssi = advertisement.rssi,
                     advertisement = advertisement,
-                    isPaired = false
+                    isPaired = false,
+                    isPairingMode = isPairingMode,
+                    isPowerOn = isPowerOn
                 )
             }
     }
 
-    private fun isGoProDeviceName(name: String): Boolean {
+    /**
+     * Strict check for GoPro naming.
+     * Rejects generic prefixes ("HD", "GP", "Max") that caused ghost devices.
+     */
+    private fun isStrictGoProName(name: String): Boolean {
         if (name.isBlank()) return false
-        return name.startsWith("GoPro", ignoreCase = true) ||
-                name.startsWith("HERO", ignoreCase = true) ||
-                name.startsWith("Hero", ignoreCase = true) ||
-                name.startsWith("HD", ignoreCase = true) ||
-                name.startsWith("GP", ignoreCase = true) ||
-                name.startsWith("Fusion", ignoreCase = true) ||
-                name.startsWith("Max", ignoreCase = true)
+        val trimmed = name.trim()
+        if (trimmed.startsWith("GoPro", ignoreCase = true)) return true
+        if (trimmed.startsWith("HERO", ignoreCase = true)) return true
+        if (trimmed.equals("Fusion", ignoreCase = true)) return true
+        if (trimmed.matches(Regex("^(?i)GP\\s*\\d{4}$"))) return true
+        return false
     }
 }

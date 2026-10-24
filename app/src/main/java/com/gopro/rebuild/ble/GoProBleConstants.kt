@@ -9,6 +9,18 @@ import java.util.UUID
  */
 object GoProBleConstants {
 
+    // === Bluetooth SIG Company Identifier ===
+    /** GoPro, Inc. Company Identifier (0x02F2 = 754 decimal) */
+    const val COMPANY_ID_GOPRO = 0x02F2
+
+    // === BLE Status Flags (from Manufacturer Data byte 1) ===
+    object StatusFlags {
+        const val HOST_POWER_ON = 0x01
+        const val WIFI_ON = 0x02
+        const val PAIRING = 0x04
+        const val CENTRAL_ROLE = 0x08
+    }
+
     // === BLE Services ===
 
     /** Control Point Service - Main command interface */

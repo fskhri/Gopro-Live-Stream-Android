@@ -36,16 +36,33 @@ class ScanViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _filterOnlyPairing = MutableStateFlow(true)
+    val filterOnlyPairing: StateFlow<Boolean> = _filterOnlyPairing.asStateFlow()
+
     private var scanJob: Job? = null
+
+    fun setFilterOnlyPairing(onlyPairing: Boolean) {
+        _filterOnlyPairing.value = onlyPairing
+        updateFilteredDevices()
+    }
+
+    private fun updateFilteredDevices() {
+        val all = cameraRepository.discoveredDevices.value
+        _devices.value = if (_filterOnlyPairing.value) {
+            all.filter { it.isPairingMode }
+        } else {
+            all
+        }
+    }
 
     fun startScan() {
         scanJob?.cancel()
         cameraRepository.clearDiscoveredDevices()
 
-        // 1. Immediately show paired/bonded GoPro devices at top
+        // 1. Show paired/bonded GoPro devices if not in strict pairing mode
         val paired = cameraRepository.getPairedDevices()
         paired.forEach { cameraRepository.addDiscoveredDevice(it) }
-        _devices.value = cameraRepository.discoveredDevices.value
+        updateFilteredDevices()
 
         // 2. Start BLE scanner for active advertisements
         scanJob = viewModelScope.launch {
@@ -57,7 +74,7 @@ class ScanViewModel @Inject constructor(
                 }
                 .collect { device ->
                     cameraRepository.addDiscoveredDevice(device)
-                    _devices.value = cameraRepository.discoveredDevices.value
+                    updateFilteredDevices()
                 }
         }
 

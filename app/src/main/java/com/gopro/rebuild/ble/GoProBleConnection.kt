@@ -1,6 +1,8 @@
 package com.gopro.rebuild.ble
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.util.Log
 import com.juul.kable.Peripheral
 import com.juul.kable.State
@@ -65,6 +67,17 @@ class GoProBleConnection(
         return try {
             _connectionState.value = ConnectionState.Connecting
             Log.d(TAG, "Connecting to ${device.name} (${device.address})...")
+
+            val btDevice = device.bluetoothDevice ?: try {
+                BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(device.address)
+            } catch (e: Exception) {
+                null
+            }
+
+            if (device.isPairingMode && btDevice != null && btDevice.bondState == BluetoothDevice.BOND_NONE) {
+                Log.i(TAG, "Device in pairing mode, requesting Bluetooth bond with ${device.name}")
+                btDevice.createBond()
+            }
 
             peripheral = if (device.advertisement != null) {
                 scope.peripheral(device.advertisement)

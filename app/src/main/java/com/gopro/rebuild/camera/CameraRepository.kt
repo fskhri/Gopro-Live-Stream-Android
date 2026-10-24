@@ -39,12 +39,28 @@ class CameraRepository @Inject constructor(
      */
     fun addDiscoveredDevice(device: GoProDevice) {
         val current = _discoveredDevices.value.toMutableList()
-        val index = current.indexOfFirst { it.address == device.address }
+        val index = current.indexOfFirst { existing ->
+            val sameName = existing.name.isNotBlank() &&
+                    !existing.name.startsWith("GoPro Camera") &&
+                    existing.name.equals(device.name, ignoreCase = true)
+            sameName || existing.address.equals(device.address, ignoreCase = true)
+        }
         if (index >= 0) {
-            current[index] = device
+            val existing = current[index]
+            current[index] = device.copy(
+                isPaired = existing.isPaired || device.isPaired,
+                bluetoothDevice = device.bluetoothDevice ?: existing.bluetoothDevice
+            )
         } else {
             current.add(device)
         }
+        // Prioritize devices in pairing mode, then online/advertising, then RSSI
+        current.sortWith(
+            compareByDescending<GoProDevice> { it.isPairingMode }
+                .thenByDescending { it.isPowerOn }
+                .thenByDescending { it.advertisement != null }
+                .thenByDescending { it.rssi }
+        )
         _discoveredDevices.value = current
     }
 
