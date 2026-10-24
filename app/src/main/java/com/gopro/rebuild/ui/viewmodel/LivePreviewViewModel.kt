@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -50,13 +51,23 @@ class LivePreviewViewModel @Inject constructor(
                 return@launch
             }
 
-            // Tell camera to start streaming
-            camera?.startPreview()?.onSuccess {
-                previewPlayer.startPreview(
-                    streamUrl = camera?.getPreviewUrl() ?: "udp://0.0.0.0:8554"
-                )
+            val currentCamera = camera
+            if (currentCamera == null) {
+                _error.value = "No camera connected"
+                return@launch
+            }
+
+            // Prepare UDP listener before asking the camera to stream. Starting
+            // the camera first can lose initial packets before ExoPlayer binds.
+            previewPlayer.startPreview(
+                streamUrl = currentCamera.getPreviewUrl()
+            )
+            delay(300)
+            currentCamera.startPreview().onSuccess {
                 _isPlaying.value = true
-            }?.onFailure { e ->
+            }.onFailure { e ->
+                previewPlayer.stopPreview()
+                _isPlaying.value = false
                 _error.value = e.message ?: "Failed to start camera preview"
             }
         }
