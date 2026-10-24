@@ -1,0 +1,57 @@
+# Built application files
+*.apk
+*.aab
+*.aar
+*.ap_
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+app/build/
+*/build/
+
+# Gradle files & local distributions
+.gradle/
+gradle-8.2/
+gradle-*.zip
+gradle-*-bin.zip
+gradle-*-all.zip
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log files
+*.log
+
+# Android Studio & IntelliJ IDEA
+*.iml
+.idea/
+.navigation/
+captures/
+
+# Keystores & sensitive credentials
+*.jks
+*.keystore
+*.key
+*.p12
+*.pem
+tiktok.json
+*.env
+*.secret
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
