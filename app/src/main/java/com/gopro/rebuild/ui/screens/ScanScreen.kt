@@ -32,11 +32,10 @@ fun ScanScreen(
     val devices by viewModel.devices.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val isConnecting by viewModel.isConnecting.collectAsState()
-    val filterOnlyPairing by viewModel.filterOnlyPairing.collectAsState()
     val error by viewModel.error.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.startScan()
+        viewModel.startScan(onCameraConnected)
     }
 
     Scaffold(
@@ -53,25 +52,6 @@ fun ScanScreen(
                 }
             )
         },
-        bottomBar = {
-            // Direct WiFi Connect button for when user already connected to camera WiFi
-            Surface(
-                tonalElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedButton(
-                    onClick = { viewModel.directWifiConnect(onCameraConnected) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    enabled = !isConnecting
-                ) {
-                    Icon(Icons.Default.Wifi, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Connect via Camera WiFi (10.5.5.9)")
-                }
-            }
-        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -82,30 +62,6 @@ fun ScanScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            // Filter Chip Selector ala GoPro Quik
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = filterOnlyPairing,
-                    onClick = { viewModel.setFilterOnlyPairing(true) },
-                    label = { Text("Mode Pairing (Cari Baru)") },
-                    leadingIcon = if (filterOnlyPairing) {
-                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                    } else null
-                )
-                FilterChip(
-                    selected = !filterOnlyPairing,
-                    onClick = { viewModel.setFilterOnlyPairing(false) },
-                    label = { Text("Semua Perangkat") },
-                    leadingIcon = if (!filterOnlyPairing) {
-                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                    } else null
-                )
-            }
 
             if (isConnecting) {
                 Box(
@@ -115,10 +71,10 @@ fun ScanScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(16.dp))
-                        Text("Connecting...")
+                        Text("Connecting to saved GoPro...")
                     }
                 }
-            } else if (devices.isEmpty() && !isScanning) {
+            } else if (devices.isEmpty() && !isScanning && !viewModel.hasSavedCamera()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -141,7 +97,7 @@ fun ScanScreen(
                         Spacer(Modifier.height(12.dp))
                         PairingGuideCard()
                         Spacer(Modifier.height(24.dp))
-                        Button(onClick = { viewModel.startScan() }) {
+                        Button(onClick = { viewModel.startScan(onCameraConnected) }) {
                             Text("Scan Lagi")
                         }
                     }
@@ -152,8 +108,25 @@ fun ScanScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item {
-                        PairingGuideCard()
+                    if (devices.isEmpty() && isScanning) {
+                        item {
+                            Text(
+                                "Looking for your saved GoPro…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (!viewModel.hasSavedCamera()) {
+                        item { PairingGuideCard() }
+                    } else if (devices.isEmpty() && isScanning) {
+                        item {
+                            Text(
+                                "Mencari GoPro tersimpan…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     items(devices) { device ->
@@ -203,14 +176,14 @@ fun PairingGuideCard() {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "Cara Pairing GoPro:",
+                    "Cara menghubungkan GoPro:",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "Nyalakan GoPro -> Usap ke bawah -> Preferences -> Connections -> Connect Device -> GoPro Quik",
+                "Pilih GoPro tersimpan untuk tersambung kembali. Kamera baru: nyalakan, buka Connections, lalu pilih Connect Device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -231,7 +204,7 @@ fun DeviceCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = device.isPowerOn || device.advertisement != null, onClick = onClick),
         border = cardBorder
     ) {
         Row(
@@ -256,6 +229,13 @@ fun DeviceCard(
                     text = device.name,
                     style = MaterialTheme.typography.titleMedium
                 )
+                if (device.isPaired) {
+                    Text(
+                        if (isOnline) "Tersimpan · siap tersambung" else "Tersimpan · kamera offline",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = device.address,

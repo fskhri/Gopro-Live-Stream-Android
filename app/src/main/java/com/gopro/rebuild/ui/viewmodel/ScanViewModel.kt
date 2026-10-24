@@ -36,10 +36,13 @@ class ScanViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val _filterOnlyPairing = MutableStateFlow(true)
+    private val _filterOnlyPairing = MutableStateFlow(false)
     val filterOnlyPairing: StateFlow<Boolean> = _filterOnlyPairing.asStateFlow()
 
     private var scanJob: Job? = null
+    private var reconnectAttempted = false
+
+    fun hasSavedCamera(): Boolean = cameraRepository.getSavedCamera() != null
 
     fun setFilterOnlyPairing(onlyPairing: Boolean) {
         _filterOnlyPairing.value = onlyPairing
@@ -47,21 +50,23 @@ class ScanViewModel @Inject constructor(
     }
 
     private fun updateFilteredDevices() {
-        val all = cameraRepository.discoveredDevices.value
-        _devices.value = if (_filterOnlyPairing.value) {
-            all.filter { it.isPairingMode }
-        } else {
-            all
-        }
+        _devices.value = cameraRepository.discoveredDevices.value
     }
 
-    fun startScan() {
+    fun startScan(onCameraConnected: (() -> Unit)? = null) {
+        reconnectAttempted = false
         scanJob?.cancel()
         cameraRepository.clearDiscoveredDevices()
 
-        // 1. Show paired/bonded GoPro devices if not in strict pairing mode
+        // Also restore bonded GoPros so user can select one without pairing again.
         val paired = cameraRepository.getPairedDevices()
         paired.forEach { cameraRepository.addDiscoveredDevice(it) }
+        updateFilteredDevices()
+
+        // Restore saved camera in the list even before its next advertisement.
+        cameraRepository.getSavedCamera()?.let { saved ->
+            cameraRepository.addDiscoveredDevice(saved)
+        }
         updateFilteredDevices()
 
         // 2. Start BLE scanner for active advertisements
@@ -75,6 +80,11 @@ class ScanViewModel @Inject constructor(
                 .collect { device ->
                     cameraRepository.addDiscoveredDevice(device)
                     updateFilteredDevices()
+                    val saved = cameraRepository.getSavedCamera()
+                    if (!reconnectAttempted && saved?.address == device.address) {
+                        reconnectAttempted = true
+                        connectToDevice(device) { onCameraConnected?.invoke() }
+                    }
                 }
         }
 

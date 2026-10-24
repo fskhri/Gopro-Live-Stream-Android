@@ -163,28 +163,24 @@ class GoProCamera(
     }
 
     suspend fun startRecording(): Result<Unit> {
-        return if (wifiManager.isConnectedToGoPro()) {
-            wifiApi.shutterStart().also {
-                if (it.isSuccess) {
-                    _status.value = _status.value.copy(isRecording = true)
-                }
-            }
-        } else {
-            bleConnection.shutterOn().map {
+        if (!wifiManager.isConnectedToGoPro()) {
+            val wifiResult = connectWifi()
+            if (wifiResult.isFailure) return wifiResult
+        }
+        return wifiApi.shutterStart().also {
+            if (it.isSuccess) {
                 _status.value = _status.value.copy(isRecording = true)
             }
         }
     }
 
     suspend fun stopRecording(): Result<Unit> {
-        return if (wifiManager.isConnectedToGoPro()) {
-            wifiApi.shutterStop().also {
-                if (it.isSuccess) {
-                    _status.value = _status.value.copy(isRecording = false)
-                }
-            }
-        } else {
-            bleConnection.shutterOff().map {
+        if (!wifiManager.isConnectedToGoPro()) {
+            val wifiResult = connectWifi()
+            if (wifiResult.isFailure) return wifiResult
+        }
+        return wifiApi.shutterStop().also {
+            if (it.isSuccess) {
                 _status.value = _status.value.copy(isRecording = false)
             }
         }

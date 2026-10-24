@@ -118,12 +118,6 @@ fun ControlScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // WiFi connection card
-            if (!isWifiConnected) {
-                WifiConnectionCard(onConnect = { viewModel.connectWifi() })
-                Spacer(Modifier.height(16.dp))
-            }
-
             // Mode selector
             ModeSelector(
                 currentMode = cameraStatus.currentMode,
@@ -139,37 +133,24 @@ fun ControlScreen(
                     .weight(1f)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black)
-                    .clickable(enabled = isWifiConnected) { onNavigateToPreview() },
+                    .clickable {
+                        if (!isWifiConnected) viewModel.connectWifi(onConnected = onNavigateToPreview)
+                        else onNavigateToPreview()
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                if (isWifiConnected) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Videocam,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = Color.White.copy(alpha = 0.5f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Tap for Live Preview",
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.WifiOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = Color.White.copy(alpha = 0.3f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Connect WiFi for Preview",
-                            color = Color.White.copy(alpha = 0.5f)
-                        )
-                    }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        if (isWifiConnected) Icons.Default.Videocam else Icons.Default.Wifi,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (isWifiConnected) "Tap for Live Preview" else "Connect WiFi and start preview",
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
                 }
 
                 // Recording indicator
@@ -248,36 +229,6 @@ fun ControlScreen(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(errorMsg)
-            }
-        }
-    }
-}
-
-@Composable
-private fun WifiConnectionCard(onConnect: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Wifi, contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Connect WiFi")
-                Text(
-                    "Enable preview, media & settings",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Button(onClick = onConnect) {
-                Text("Connect")
             }
         }
     }

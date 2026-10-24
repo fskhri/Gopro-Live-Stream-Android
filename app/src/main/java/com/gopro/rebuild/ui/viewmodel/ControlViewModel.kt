@@ -75,28 +75,52 @@ class ControlViewModel @Inject constructor(
         }
     }
 
-    fun connectWifi() {
+    fun connectWifi(onConnected: (() -> Unit)? = null) {
         viewModelScope.launch {
-            android.util.Log.d("ControlViewModel", "connectWifi clicked, camera=$camera")
-            camera?.connectWifi()?.onFailure { e ->
-                android.util.Log.e("ControlViewModel", "connectWifi error: ${e.message}", e)
-                _error.value = "WiFi failed: ${e.message}"
+            val result = camera?.connectWifi()
+            if (result == null) {
+                _error.value = "No camera connected"
+            } else {
+                result.onSuccess {
+                    _isWifiConnected.value = true
+                    onConnected?.invoke()
+                }.onFailure { e ->
+                    _error.value = "WiFi failed: ${e.message}"
+                }
             }
         }
     }
 
     fun startRecording() {
         viewModelScope.launch {
-            camera?.startRecording()?.onFailure { e ->
-                _error.value = "Start failed: ${e.message}"
+            val currentCamera = camera
+            if (currentCamera == null) {
+                _error.value = "No camera connected"
+                return@launch
+            }
+            _error.value = null
+            val result = currentCamera.startRecording()
+            result.onSuccess {
+                _isWifiConnected.value = currentCamera.wifiConnectionState.value == WifiConnectionState.Connected
+            }.onFailure { e ->
+                _error.value = "Could not connect to GoPro WiFi or start recording: ${e.message}"
             }
         }
     }
 
     fun stopRecording() {
         viewModelScope.launch {
-            camera?.stopRecording()?.onFailure { e ->
-                _error.value = "Stop failed: ${e.message}"
+            val currentCamera = camera
+            if (currentCamera == null) {
+                _error.value = "No camera connected"
+                return@launch
+            }
+            _error.value = null
+            val result = currentCamera.stopRecording()
+            result.onSuccess {
+                _isWifiConnected.value = currentCamera.wifiConnectionState.value == WifiConnectionState.Connected
+            }.onFailure { e ->
+                _error.value = "Could not connect to GoPro WiFi or stop recording: ${e.message}"
             }
         }
     }

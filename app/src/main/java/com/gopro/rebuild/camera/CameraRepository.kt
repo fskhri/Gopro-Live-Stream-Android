@@ -3,7 +3,13 @@ package com.gopro.rebuild.camera
 import com.gopro.rebuild.ble.GoProDevice
 import com.gopro.rebuild.ble.GoProScanner
 import com.gopro.rebuild.wifi.GoProWifiApi
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.util.Log
 import com.gopro.rebuild.wifi.WifiConnectionManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,8 +17,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val CAMERA_SESSION_TAG = "CameraRepository"
+
 @Singleton
 class CameraRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val scanner: GoProScanner,
     private val wifiManager: WifiConnectionManager,
     private val wifiApi: GoProWifiApi
@@ -22,6 +31,28 @@ class CameraRepository @Inject constructor(
 
     private val _discoveredDevices = MutableStateFlow<List<GoProDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<GoProDevice>> = _discoveredDevices.asStateFlow()
+    private val preferences = context.getSharedPreferences("camera_sessions", Context.MODE_PRIVATE)
+    private val savedAddressKey = "last_camera_address"
+    private val savedNameKey = "last_camera_name"
+
+    @SuppressLint("MissingPermission")
+    fun getSavedCamera(): GoProDevice? {
+        val address = preferences.getString(savedAddressKey, null) ?: return null
+        val name = preferences.getString(savedNameKey, null) ?: "GoPro"
+        val bluetoothDevice = try {
+            BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            Log.w(CAMERA_SESSION_TAG, "Saved camera address is invalid", error)
+            null
+        } ?: return null
+        return GoProDevice(
+            name = name,
+            address = address,
+            bluetoothDevice = bluetoothDevice,
+            isPaired = bluetoothDevice.bondState == BluetoothDevice.BOND_BONDED,
+            isPowerOn = false
+        )
+    }
 
     fun getPairedDevices(): List<GoProDevice> {
         return scanner.getPairedGoProDevices()
@@ -83,6 +114,10 @@ class CameraRepository @Inject constructor(
 
         return if (result.isSuccess) {
             _connectedCamera.value = camera
+            preferences.edit()
+                .putString(savedAddressKey, device.address)
+                .putString(savedNameKey, device.name)
+                .apply()
             Result.success(camera)
         } else {
             Result.failure(result.exceptionOrNull() ?: Exception("Connection failed"))
@@ -92,9 +127,12 @@ class CameraRepository @Inject constructor(
     /**
      * Disconnect from current camera
      */
-    suspend fun disconnectCamera() {
+    suspend fun disconnectCamera(forgetSession: Boolean = false) {
         _connectedCamera.value?.disconnect()
         _connectedCamera.value = null
+        if (forgetSession) {
+            preferences.edit().remove(savedAddressKey).remove(savedNameKey).apply()
+        }
     }
 
     /**

@@ -33,10 +33,13 @@ fun LivePreviewScreen(
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
-        viewModel.startPreview()
         onDispose {
             viewModel.stopPreview()
         }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.startPreview()
     }
 
     Scaffold(
